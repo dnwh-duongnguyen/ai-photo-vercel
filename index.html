@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>AI Photo Album Generator</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 text-gray-800">
+  <div class="container mx-auto p-4 md:p-8">
+    <header class="text-center mb-8">
+      <h1 class="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-500 to-pink-500">
+        AI Photo Album Generator
+      </h1>
+      <p class="text-lg text-gray-600">Biến một bức ảnh chân dung thành vô vàn phong cách sống động!</p>
+    </header>
+    <main>
+      <input type="file" id="imageUpload" accept="image/*" />
+      <button onclick="generateImage()">Tạo ảnh</button>
+      <div id="result"></div>
+    </main>
+  </div>
+
+  <script>
+    async function generateImage() {
+      const fileInput = document.getElementById("imageUpload");
+      if (!fileInput.files[0]) {
+        alert("Vui lòng chọn ảnh");
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        const base64Image = e.target.result.split(",")[1];
+        const res = await fetch("/api/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            prompt: "A beautiful portrait style",
+            imageData: base64Image
+          })
+        });
+        const data = await res.json();
+        const candidate = data?.candidates?.[0];
+        const base64Data = candidate?.content?.parts?.find(p => p.inlineData)?.inlineData?.data;
+        if (base64Data) {
+          document.getElementById("result").innerHTML =
+            `<img src="data:image/png;base64,${base64Data}" class="max-w-md rounded"/>`;
+        } else {
+          alert("Không tạo được ảnh!");
+        }
+      };
+      reader.readAsDataURL(fileInput.files[0]);
+    }
+  </script>
+</body>
+</html>
