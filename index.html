@@ -1,62 +1,127 @@
-<script>
-  async function fileToCompressedBase64(file, maxSide = 1280, quality = 0.85) {
-    const dataUrl = await new Promise(res => {
-      const fr = new FileReader();
-      fr.onload = () => res(fr.result);
-      fr.readAsDataURL(file);
-    });
-    const img = new Image();
-    img.src = dataUrl;
-    await img.decode();
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>AI Photo Album Generator</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 text-gray-800">
+  <div class="container mx-auto p-6">
+    <header class="text-center mb-8">
+      <h1 class="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-500 to-pink-500">
+        AI Photo Album Generator
+      </h1>
+      <p class="text-gray-600">Biến một bức ảnh chân dung thành vô vàn phong cách sống động!</p>
+    </header>
 
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    let { width, height } = img;
+    <main class="max-w-xl mx-auto bg-white rounded-xl shadow p-6">
+      <div class="space-y-4">
+        <label class="block">
+          <span class="block mb-2 font-medium">Chọn ảnh (nên &lt; 1.5MB)</span>
+          <input id="imageUpload" type="file" accept="image/*"
+                 class="w-full file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100"/>
+        </label>
 
-    const scale = Math.min(1, maxSide / Math.max(width, height));
-    width = Math.round(width * scale);
-    height = Math.round(height * scale);
-    canvas.width = width;
-    canvas.height = height;
-    ctx.drawImage(img, 0, 0, width, height);
+        <label class="block">
+          <span class="block mb-2 font-medium">Phong cách (prompt)</span>
+          <textarea id="prompt" rows="3"
+            class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-400"
+            placeholder="A beautiful portrait style"></textarea>
+        </label>
 
-    // Xuất JPEG đã nén
-    const out = canvas.toDataURL('image/jpeg', quality);
-    return out.split(',')[1]; // base64 không kèm prefix
-  }
+        <button id="btnGen"
+          class="w-full bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2.5 rounded-lg transition">
+          Tạo ảnh
+        </button>
 
-  async function generateImage() {
-    const fileInput = document.getElementById("imageUpload");
-    if (!fileInput.files[0]) { alert("Vui lòng chọn ảnh"); return; }
+        <p id="msg" class="text-sm text-gray-500"></p>
 
-    // 1) Nén ảnh trước khi gửi
-    const base64Image = await fileToCompressedBase64(fileInput.files[0]);
+        <div id="result" class="mt-4"></div>
+      </div>
+    </main>
+  </div>
 
-    // 2) Gọi API backend
-    const res = await fetch("/api/generate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        prompt: "A beautiful portrait style",
-        imageData: base64Image
-      })
-    });
+  <script>
+    // Nén ảnh về tối đa 1280px, chất lượng 0.85 → giúp tránh timeout
+    async function fileToCompressedBase64(file, maxSide = 1280, quality = 0.85) {
+      const dataUrl = await new Promise((res) => {
+        const fr = new FileReader();
+        fr.onload = () => res(fr.result);
+        fr.readAsDataURL(file);
+      });
 
-    if (!res.ok) {
-      const text = await res.text();
-      alert("Lỗi API: " + text);
-      return;
+      const img = new Image();
+      img.src = dataUrl;
+      await img.decode();
+
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      let { width, height } = img;
+
+      const scale = Math.min(1, maxSide / Math.max(width, height));
+      width = Math.round(width * scale);
+      height = Math.round(height * scale);
+
+      canvas.width = width;
+      canvas.height = height;
+      ctx.drawImage(img, 0, 0, width, height);
+
+      const out = canvas.toDataURL('image/jpeg', quality);
+      return out.split(',')[1]; // chỉ lấy phần base64
     }
 
-    // 3) Hiển thị ảnh kết quả
-    const data = await res.json();
-    const candidate = data?.candidates?.[0];
-    const base64Data = candidate?.content?.parts?.find(p => p.inlineData)?.inlineData?.data;
-    if (base64Data) {
-      document.getElementById("result").innerHTML =
-        `<img src="data:image/png;base64,${base64Data}" class="max-w-md rounded"/>`;
-    } else {
-      alert("Không tạo được ảnh!");
+    async function generateImage() {
+      const msg = document.getElementById('msg');
+      msg.textContent = '';
+
+      const fileInput = document.getElementById('imageUpload');
+      const promptEl = document.getElementById('prompt');
+      const file = fileInput.files[0];
+      if (!file) { alert('Vui lòng chọn ảnh'); return; }
+
+      const prompt = (promptEl.value || 'A beautiful portrait style').trim();
+
+      try {
+        msg.textContent = 'Đang nén ảnh...';
+        const base64Image = await fileToCompressedBase64(file);
+
+        msg.textContent = 'Đang gửi tới AI...';
+        const res = await fetch('/api/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt, imageData: base64Image })
+        });
+
+        const text = await res.text(); // đọc raw để hiện lỗi rõ ràng
+        if (!res.ok) {
+          alert('Lỗi API (' + res.status + '): ' + text);
+          console.error('API error:', res.status, text);
+          msg.textContent = 'Có lỗi xảy ra. Vui lòng thử ảnh nhỏ hơn hoặc thử lại sau.';
+          return;
+        }
+
+        const data = JSON.parse(text);
+        const candidate = data?.candidates?.[0];
+        const base64Data = candidate?.content?.parts?.find(p => p.inlineData)?.inlineData?.data;
+
+        if (base64Data) {
+          document.getElementById('result').innerHTML =
+            `<img src="data:image/png;base64,${base64Data}" class="max-w-full rounded-xl shadow" alt="Kết quả"/>`;
+          msg.textContent = 'Xong! Bạn có thể lưu ảnh bằng chuột phải.';
+        } else {
+          alert('Không tạo được ảnh! Phản hồi: ' + text);
+          console.warn('No image in response:', data);
+          msg.textContent = 'Không tạo được ảnh. Hãy thử prompt khác hoặc ảnh khác.';
+        }
+      } catch (e) {
+        alert('Lỗi không xác định: ' + (e?.message || e));
+        console.error(e);
+        msg.textContent = 'Lỗi không xác định. Thử lại sau.';
+      }
     }
-  }
-</script>
+
+    document.getElementById('btnGen').addEventListener('click', generateImage);
+  </script>
+</body>
+</html>
