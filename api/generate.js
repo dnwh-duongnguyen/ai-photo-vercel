@@ -1,5 +1,3 @@
-export const config = { runtime: 'edge' };
-
 const GEMINI_ENDPOINT =
   'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent';
 
@@ -48,3 +46,4 @@ export default async function handler(req) {
     return new Response(e?.message || 'Unknown error', { status: 500 });
   }
 }
+
